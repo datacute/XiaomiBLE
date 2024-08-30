@@ -1,4 +1,9 @@
-#include "NimBLEDevice.h"
+#include <Arduino.h>
+
+#include <BLEDevice.h>
+#include <BLEUtils.h>
+#include <BLEScan.h>
+#include <BLEAdvertisedDevice.h>
 #include "M5StickCPlus2.h"
 
 #include "ssFont.h"
@@ -8,17 +13,10 @@
 M5Canvas img(&StickCP2.Display);
 M5Canvas clc(&StickCP2.Display);
 
-// The remote service we wish to connect to.
-static BLEUUID serviceUUID("ebe0ccb0-7a0a-4b0c-8a1a-6ff2997da3a6");
-// The characteristic of the remote service we are interested in.
-static BLEUUID charUUID("ebe0ccc1-7a0a-4b0c-8a1a-6ff2997da3a6");
+static BLEUUID btHomeUUID((uint16_t)0xFCD2);
 
-BLEClient *pClient;
+BLEScan *pBLEScan;
 
-static BLEAddress *pServerAddress;
-static boolean doConnect = false;
-static boolean connected = false;
-static BLERemoteCharacteristic* pRemoteCharacteristic;
 std::string add[4]={"a4:c1:38:fb:64:94","a4:c1:38:0e:f9:68","a4:c1:38:e2:96:ab","a4:c1:38:6f:b8:60"};
  String rooms[4]={"KITCHEN", "FLOOR 2","OUTSIDE","BEDROOM"};
 /*
@@ -34,7 +32,7 @@ Name: LYWSD03MMC, Address: a4:c1:38:fb:64:94, rssi: -98, serviceData:  dnevni
   float humi[4];
   float voltage[4];
  
-  bool ch=0;
+  static bool isScanning = false;
 
   int posx[4]={5,90,5,90};
   int posy[4]={5,5,70,70};
@@ -50,122 +48,64 @@ Name: LYWSD03MMC, Address: a4:c1:38:fb:64:94, rssi: -98, serviceData:  dnevni
   int s=0;
   bool freeL[4]={1,1,1,1};
 
+// The data locations are from thermometers using BTHomev2 format
+// including packetId, temperature, humidity, battery voltage,
+// (and seemingly a power status?)
+// These come in multiple advertising packets. Examples:
+// [40][00][8B][01][64][02][5B][08][03][58][16]
+// [40][00][91][0C][6E][0B][10][00]
+// See https://bthome.io/format/ for more information.
+// If actively scanning the received data is longer,
+// as it includes the device name.
 static void notifyCallback(
-  BLERemoteCharacteristic* pBLERemoteCharacteristic,
+  int s,
   uint8_t* pData,
-  size_t length,
-  bool isNotify) {
-  Serial.print("Notify callback for SENSOR 0 ");
-  freeL[0]=0;
-  temp[0] = (pData[0] | (pData[1] << 8)) * 0.01; //little endian
-  humi[0] = pData[2];
-  voltage[0] = (pData[3] | (pData[4] << 8)) * 0.001; //little endian
-  Serial.printf("temp = %.1f C ; humidity = %.1f %% ; voltage = %.3f V\n", temp[0], humi[0], voltage[0]);
-  Serial.println();
-  freeL[0]=1;
-}
-
-static void notifyCallback2(
-  BLERemoteCharacteristic* pBLERemoteCharacteristic,
-  uint8_t* pData,
-  size_t length,
-  bool isNotify) {
-  Serial.print("Notify callback for SENSOR 1 ");
-  
-  freeL[1]=0;
-  temp[1] = (pData[0] | (pData[1] << 8)) * 0.01; //little endian
-  humi[1] = pData[2];
-  voltage[1] = (pData[3] | (pData[4] << 8)) * 0.001; //little endian
-  Serial.printf("temp = %.1f C ; humidity = %.1f %% ; voltage = %.3f V\n", temp[1], humi[1], voltage[1]);
-
-  Serial.println();
-  freeL[1]=1;
-}
-
-static void notifyCallback3(
-  BLERemoteCharacteristic* pBLERemoteCharacteristic,
-  uint8_t* pData,
-  size_t length,
-  bool isNotify) {
-  Serial.print("Notify callback for SENSOR 2 ");
-  freeL[2]=0;
-  temp[2] = (pData[0] | (pData[1] << 8)) * 0.01; //little endian
-  humi[2] = pData[2];
-  voltage[2] = (pData[3] | (pData[4] << 8)) * 0.001; //little endian
-  Serial.printf("temp = %.1f C ; humidity = %.1f %% ; voltage = %.3f V\n", temp[2], humi[2], voltage[2]);
-  
-  Serial.println();
-  freeL[2]=1;
-}
-
-static void notifyCallback4(
-  BLERemoteCharacteristic* pBLERemoteCharacteristic,
-  uint8_t* pData,
-  size_t length,
-  bool isNotify) {
-  Serial.print("Notify callback for SENSOR 3 ");
-  freeL[3]=0;
-  
-  temp[3] = (pData[0] | (pData[1] << 8)) * 0.01; //little endian
-  humi[3] = pData[2];
-  voltage[3] = (pData[3] | (pData[4] << 8)) * 0.001; //little endian
-  Serial.printf("temp = %.1f C ; humidity = %.1f %% ; voltage = %.3f V\n", temp[3], humi[3], voltage[3]);
- 
-  freeL[3]=1;
-  Serial.println();
-}
-
-bool connectToServer(BLEAddress pAddress) {
-  Serial.print("Forming a connection to ");
-  Serial.println(pAddress.toString().c_str());
-
-  pClient  = BLEDevice::createClient();
-  Serial.println(" - Created client");
-
-  // Connect to the remove BLE Server.
-  pClient->connect(pAddress);
-  Serial.println(" - Connected to server");
-
-  // Obtain a reference to the service we are after in the remote BLE server.
-  BLERemoteService* pRemoteService = pClient->getService(serviceUUID);
-  if (pRemoteService == nullptr) {
-    Serial.print("Failed to find our service UUID: ");
-    Serial.println(serviceUUID.toString().c_str());
-    return false;
+  size_t length) {
+  Serial.print("Notify callback for SENSOR ");
+  Serial.print(rooms[s].c_str());
+  if (pData[0]!=0x40)
+  {
+    Serial.println("Received wrong format");
+    return;
   }
-  Serial.println(" - Found our service");
-
-
-  // Obtain a reference to the characteristic in the service of the remote BLE server.
-  pRemoteCharacteristic = pRemoteService->getCharacteristic(charUUID);
-  if (pRemoteCharacteristic == nullptr) {
-    Serial.print("Failed to find our characteristic UUID: ");
-    Serial.println(charUUID.toString().c_str());
-    return false;
+  freeL[s]=0;
+  if ((length >= 6) && (pData[3]==0x0C)) {
+    voltage[s] = (pData[4] | (pData[5] << 8)) * 0.001; //little endian
   }
-  Serial.println(" - Found our characteristic");
-
-  // Read the value of the characteristic.
-  std::string value = pRemoteCharacteristic->readValue();
-  Serial.print("The characteristic value was: ");
-  Serial.println(value.c_str());
-
-  if(pClient->getPeerAddress().toString().c_str()==add[0])
-  pRemoteCharacteristic->registerForNotify(notifyCallback);
-
-  if(pClient->getPeerAddress().toString().c_str()==add[1])
-  pRemoteCharacteristic->registerForNotify(notifyCallback2);
-
-   if(pClient->getPeerAddress().toString().c_str()==add[2])
-  pRemoteCharacteristic->registerForNotify(notifyCallback3);
-
-     if(pClient->getPeerAddress().toString().c_str()==add[3])
-  pRemoteCharacteristic->registerForNotify(notifyCallback4);
-
-  connected = true;//added
-  return true;//added
+  if ((length >= 7) && (pData[5]==0x02)) {
+    temp[s] = (pData[6] | (pData[7] << 8)) * 0.01; //little endian
+  }
+  if ((length >= 11) && (pData[8]==0x03)) {
+    humi[s] = (pData[9] | (pData[10] << 8)) * 0.01; //little endian
+  }
+  Serial.printf(" temp = %.1f C ; humidity = %.1f %% ; voltage = %.3f V\n", temp[s], humi[s], voltage[s]);
+  freeL[s]=1;
 }
 
+class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
+  void onResult(BLEAdvertisedDevice advertisedDevice) {
+    uint8_t cServiceData[255]; // The entire payload is limited to 255 bytes
+    if (advertisedDevice.haveServiceData() == true) {
+      for (int sdi = 0; sdi < advertisedDevice.getServiceDataCount(); sdi++) {
+        BLEUUID sdUUID = advertisedDevice.getServiceDataUUID(sdi);
+        if (btHomeUUID.equals(sdUUID)) {
+          for (int addr = 0; addr < 4; addr++) {
+            if(advertisedDevice.getAddress().toString().c_str()==add[addr])
+            {
+              String strServiceData = advertisedDevice.getServiceData(sdi);
+              memcpy(cServiceData, strServiceData.c_str(), strServiceData.length());
+              notifyCallback(addr, cServiceData, strServiceData.length());
+            }
+          }
+        }
+      }
+    }
+  }
+};
+
+static void scanCompleteCallback(BLEScanResults scanResults) {
+  isScanning = false;
+}
 
 void setup() {
 
@@ -181,7 +121,8 @@ void setup() {
     clc.setSwapBytes(true);
   
   Serial.begin(115200);
-  Serial.println("Starting Arduino BLE Client application...");
+  Serial.println("Starting BLE advertising monitor...");
+
   BLEDevice::init("");
 
      int co=220;
@@ -189,10 +130,11 @@ void setup() {
      {grays[i]=StickCP2.Display.color565(co, co, co);
      co=co-20;}
 
-  connectToServer(BLEAddress(add[0]));
-  connectToServer(BLEAddress(add[1]));
-  connectToServer(BLEAddress(add[2]));
-  connectToServer(BLEAddress(add[3]));
+  pBLEScan = BLEDevice::getScan();  //create new scan
+  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks(), true, true);
+  pBLEScan->setActiveScan(false);
+  pBLEScan->setInterval(100);
+  pBLEScan->setWindow(99);
   StickCP2.Display.fillScreen(BLACK);
 
 } // End of setup.
@@ -266,6 +208,10 @@ void draw()
 
 
 void loop() {
+    if (!isScanning) {
+      isScanning = true;
+      pBLEScan->start(60, scanCompleteCallback, true);
+    }
 
    vTaskDelay(20);
 
