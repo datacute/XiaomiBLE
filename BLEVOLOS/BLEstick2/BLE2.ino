@@ -168,7 +168,10 @@ sprintf(clk, "%02d", timeinfo.tm_sec);
 clc.drawString(clk,48,36);
 clc.setTextDatum(0);
 clc.setTextColor(RED,BLACK);
-clc.drawString("VOLOS",0,48);
+// This string originally said "VOLOS" as it was created by him
+// See https://github.com/VolosR/XiaomiBLE
+// and https://www.youtube.com/watch?v=ExFxuvfCbAU
+clc.drawString("HOME",0,48);
 
 clc.unloadFont();
 clc.pushSprite(175,5);
