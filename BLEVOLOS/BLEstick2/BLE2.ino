@@ -111,7 +111,10 @@ void setup() {
     img.createSprite(170,135);
     clc.createSprite(60,125);
     clc.setSwapBytes(true);
-  
+
+    setenv("TZ", "UTC-12", 1);
+    tzset();
+    
   Serial.begin(115200);
   Serial.println("Starting BLE advertising monitor...");
 
