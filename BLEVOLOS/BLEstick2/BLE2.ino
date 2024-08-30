@@ -279,7 +279,7 @@ void loop() {
     if(millis()>tt+period){
     vol = StickCP2.Power.getBatteryVoltage();
     volE=map(vol,3000,4180,0,5); 
-    if(freeL[0]==1 && freeL[1]==1 && freeL[0]==1 && freeL[3]==1)
+    if(freeL[0]==1 && freeL[1]==1 && freeL[2]==1 && freeL[3]==1)
     draw();
     tt=millis();
     }
