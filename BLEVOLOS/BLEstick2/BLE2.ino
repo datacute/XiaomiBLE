@@ -17,16 +17,8 @@ static BLEUUID btHomeUUID((uint16_t)0xFCD2);
 
 BLEScan *pBLEScan;
 
-std::string add[4]={"a4:c1:38:fb:64:94","a4:c1:38:0e:f9:68","a4:c1:38:e2:96:ab","a4:c1:38:6f:b8:60"};
- String rooms[4]={"KITCHEN", "FLOOR 2","OUTSIDE","BEDROOM"};
-/*
-Name: LYWSD03MMC, Address: a4:c1:38:0e:f9:68, rssi: -94, serviceData: gore
-Name: LYWSD03MMC, Address: a4:c1:38:6f:b8:60, rssi: -72, serviceData:   soba
-Name: LYWSD03MMC, Address: a4:c1:38:83:00:fa, rssi: -67, serviceData:   kupaona
-
-Name: LYWSD03MMC, Address: a4:c1:38:e2:96:ab, rssi: -92, serviceData:  vani
-Name: LYWSD03MMC, Address: a4:c1:38:fb:64:94, rssi: -98, serviceData:  dnevni
-*/
+std::string add[4]={"a4:c1:38:db:06:a9","a4:c1:38:82:5e:21","a4:c1:38:2e:ce:c3","a4:c1:38:3b:46:fa"};
+String rooms[4]={"UPSTAIRS","LOUNGE","GARAGE","DINING"};
 
   float temp[4];
   float humi[4];
