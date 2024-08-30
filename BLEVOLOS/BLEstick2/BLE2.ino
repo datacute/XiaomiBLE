@@ -138,12 +138,17 @@ bool onoff = true;
 
 void drawCL()
 {
+time_t now;
+struct tm timeinfo;
+time(&now);
+localtime_r(&now, &timeinfo);
 clc.fillSprite(BLACK);
 clc.setTextDatum(0);
 clc.setTextColor(grays[0],BLACK);
-auto dt = StickCP2.Rtc.getDateTime();
+char clk[6];
 clc.loadFont(hFont);
-clc.drawString(String(dt.time.hours)+":"+String(dt.time.minutes),0,0);
+sprintf(clk, "%02d:%02d", timeinfo.tm_hour,timeinfo.tm_min);
+clc.drawString(clk,0,0);
 clc.unloadFont();
 clc.pushImage(0,65,60,60,logo);
 clc.fillSmoothRoundRect(36,26,24,20,2,grays[8]);
@@ -156,7 +161,8 @@ clc.fillRect(3+(i*5),29,3,14,GREEN);
 clc.loadFont(ssFont);
 clc.setTextColor(grays[0],grays[8]);
 clc.setTextDatum(middle_center);
-clc.drawString(String(dt.time.seconds),48,36);
+sprintf(clk, "%02d", timeinfo.tm_sec);
+clc.drawString(clk,48,36);
 clc.setTextDatum(0);
 clc.setTextColor(RED,BLACK);
 clc.drawString("VOLOS",0,48);
